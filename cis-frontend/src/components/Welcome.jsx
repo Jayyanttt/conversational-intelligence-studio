@@ -1,4 +1,5 @@
 import { ANALYSTS } from "../data/analysts.js";
+import { GearIcon } from "./Settings.jsx";
 
 // Abstract motif: participant nodes joined by fine lines. Decorative only.
 function Constellation() {
@@ -10,14 +11,14 @@ function Constellation() {
     <svg viewBox="0 0 560 560" aria-hidden="true" fill="none">
       {links.map(([a, b]) => (
         <line key={a + "-" + b} x1={nodes[a][0]} y1={nodes[a][1]} x2={nodes[b][0]} y2={nodes[b][1]}
-          stroke="#C8B9A9" strokeWidth="1" />
+          style={{ stroke: "var(--stone)" }} strokeWidth="1" />
       ))}
       {nodes.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={i === 1 ? 9 : 6} fill={i === 1 ? "#B97859" : "#FAF8F4"}
-          stroke={i === 1 ? "#B97859" : "#A9B4A0"} strokeWidth="1.5" />
+        <circle key={i} cx={x} cy={y} r={i === 1 ? 9 : 6} style={{ fill: i === 1 ? "var(--terra)" : "var(--paper)", stroke: i === 1 ? "var(--terra)" : "var(--sage)" }}
+          strokeWidth="1.5" />
       ))}
       {/* quiet waveform */}
-      <g stroke="#A9B4A0" strokeWidth="2" strokeLinecap="round">
+      <g style={{ stroke: "var(--sage)" }} strokeWidth="2" strokeLinecap="round">
         {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
           const h = [6, 14, 24, 12, 30, 16, 8, 20, 10][i];
           return <line key={i} x1={210 + i * 14} y1={500 - h} x2={210 + i * 14} y2={500 + h} />;
@@ -27,12 +28,15 @@ function Constellation() {
   );
 }
 
-export default function Welcome({ analystId, onSelect, onEnter }) {
+export default function Welcome({ onOpen, onSettings }) {
   return (
     <main className="welcome">
       <div className="welcome-head wordmark">
         <b>Conversational Intelligence</b> Studio
       </div>
+      <button type="button" className="btn btn-quiet welcome-set" onClick={onSettings}>
+        <GearIcon /> Settings
+      </button>
 
       <section>
         <h1>There’s more to every conversation.</h1>
@@ -41,26 +45,19 @@ export default function Welcome({ analystId, onSelect, onEnter }) {
           analyst, and ask what is really going on in it.
         </p>
 
-        <div className="picker" role="radiogroup" aria-label="Choose an analyst">
+        <p className="eyebrow">Choose an analyst to open its workspace</p>
+        <div className="picker">
           {ANALYSTS.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              role="radio"
-              aria-checked={analystId === a.id}
-              className="pick"
-              onClick={() => onSelect(a.id)}
-            >
+            <button key={a.id} type="button" className="pick" onClick={() => onOpen(a.id)}>
               <span className="t">{a.name}</span>
               <span className="d">{a.description}</span>
-              <span className="radio" aria-hidden="true" />
+              <svg className="arrow" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M4 10h11M11 5l5 5-5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
           ))}
         </div>
 
-        <button type="button" className="btn btn-primary" onClick={onEnter}>
-          Open workspace
-        </button>
         <p className="privacy">
           Paste anonymised text only, and make sure you have permission to share it.
         </p>

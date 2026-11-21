@@ -52,9 +52,12 @@ async function request(path, options) {
 export const getHealth = () => request("/health");
 
 // Sends only the latest message; the backend owns the history.
-export const postChat = ({ session_id, message, system_prompt }) => {
+// analyst_type is an OPTIONAL additive field ("customer" | "workplace" | "patterns")
+// so the backend can record which analyst a session belongs to. See context.md.
+export const postChat = ({ session_id, message, system_prompt, analyst_type }) => {
   const payload = { session_id, message };
   if (system_prompt && system_prompt.trim()) payload.system_prompt = system_prompt;
+  if (analyst_type) payload.analyst_type = analyst_type;
   return request("/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

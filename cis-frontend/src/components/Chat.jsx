@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { ANALYSTS } from "../data/analysts.js";
+import { GearIcon } from "./Settings.jsx";
+import { useDismiss } from "../useDismiss.js";
 
 const MAX = 4000;
 
@@ -47,21 +50,27 @@ function Markdown({ text }) {
   );
 }
 
-/* ---------- abstract assistant glyph: three linked nodes ---------- */
-function Glyph({ spin }) {
-  return (
-    <span className="glyph" aria-hidden="true">
-      <svg viewBox="0 0 36 36" fill="none">
-        <g className={spin ? "ring" : ""}>
-          <line x1="11" y1="22" x2="18" y2="11" stroke="#C8B9A9" />
-          <line x1="18" y1="11" x2="26" y2="21" stroke="#C8B9A9" />
-          <line x1="11" y1="22" x2="26" y2="21" stroke="#C8B9A9" />
-          <circle cx="11" cy="22" r="2.6" fill="#A9B4A0" />
-          <circle cx="18" cy="11" r="3" fill="#B97859" />
-          <circle cx="26" cy="21" r="2.6" fill="#B9CDD0" />
+/* ---------- abstract assistant glyph: three linked nodes (a button when onClick is given) ---------- */
+function Glyph({ spin, onClick }) {
+  const svg = (
+    <svg viewBox="0 0 36 36" fill="none" aria-hidden="true">
+      <g className={spin ? "ring" : ""}>
+        <g style={{ stroke: "var(--stone)" }}>
+          <line x1="11" y1="22" x2="18" y2="11" />
+          <line x1="18" y1="11" x2="26" y2="21" />
+          <line x1="11" y1="22" x2="26" y2="21" />
         </g>
-      </svg>
-    </span>
+        <circle cx="11" cy="22" r="2.6" style={{ fill: "var(--sage)" }} />
+        <circle cx="18" cy="11" r="3" style={{ fill: "var(--terra)" }} />
+        <circle cx="26" cy="21" r="2.6" style={{ fill: "var(--mist)" }} />
+      </g>
+    </svg>
+  );
+  return onClick ? (
+    <button type="button" className="glyph home" onClick={onClick}
+      aria-label="Home: back to analyst selection" title="Home">{svg}</button>
+  ) : (
+    <span className="glyph" aria-hidden="true">{svg}</span>
   );
 }
 
@@ -105,34 +114,67 @@ function Metadata({ meta }) {
   );
 }
 
+/* ---------- secondary analyst switcher (popover, not primary navigation) ---------- */
+function Switcher({ analyst, onSwitch }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useDismiss(open, () => setOpen(false), ref);
+  return (
+    <div className="switcher" ref={ref}>
+      <button type="button" className="who-btn" aria-haspopup="true" aria-expanded={open}
+        aria-label={`${analyst.name} analyst. Switch analyst`} onClick={() => setOpen(!open)}>
+        <span className="name">{analyst.name}<span className="sfx"> Analyst</span>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="sub">{analyst.short}</span>
+      </button>
+      {open && (
+        <div className="menu-pop" aria-label="Switch analyst">
+          <p className="pop-title">Switch analyst</p>
+          {ANALYSTS.map((a) => (
+            <button key={a.id} type="button" className="pop-item" aria-current={a.id === analyst.id}
+              onClick={() => { setOpen(false); if (a.id !== analyst.id) onSwitch(a.id); }}>
+              <b>{a.name}</b><small>{a.short}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- main chat view ---------- */
 export default function Chat({
-  analyst, messages, loading, loadingHistory, error, systemPrompt, promptEdited,
-  onPrompt, onResetPrompt, onSend, onDismissError, onOpenMenu,
+  analyst, messages, loading, loadingHistory, error, systemPrompt, promptEdited, draft,
+  onDraft, onPrompt, onResetPrompt, onSend, onDismissError, onOpenMenu, onHome, onSwitch, onOpenSettings,
 }) {
-  const [text, setText] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const endRef = useRef(null);
   const inputRef = useRef(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); },
-    [messages.length, loading]);
+  useEffect(() => {
+    const calm = document.documentElement.dataset.motion === "reduce";
+    endRef.current?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "end" });
+  }, [messages.length, loading]);
 
   // Grow the textarea with its content.
   useEffect(() => {
     const el = inputRef.current;
     if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 220) + "px"; }
-  }, [text]);
+  }, [draft]);
 
-  const trimmed = text.trim();
+  const trimmed = draft.trim();
   const tooLong = trimmed.length > MAX;
   const canSend = trimmed.length > 0 && !tooLong && !loading && !loadingHistory;
 
   const submit = () => {
     if (!canSend) return;
-    setText("");
+    onDraft("");
+    // Restore the text only after a real failure (false); null means the result was ignored.
     Promise.resolve(onSend(trimmed)).then((ok) => {
-      if (ok === false) setText((cur) => cur || trimmed); // restore after a failed send
+      if (ok === false) onDraft((cur) => cur || trimmed);
     });
   };
   const onKey = (e) => {
@@ -142,19 +184,19 @@ export default function Chat({
   return (
     <div className="main">
       <header className="top">
-        <button type="button" className="btn btn-quiet menu" onClick={onOpenMenu} aria-label="Open navigation">
-          Menu
+        <button type="button" className="icon-btn menu" onClick={onOpenMenu} aria-label="Open navigation">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
         </button>
-        <div className="who">
-          <Glyph />
-          <div style={{ minWidth: 0 }}>
-            <div className="name">{analyst.name}<span className="sfx"> Analyst</span></div>
-            <div className="sub">{analyst.short}</div>
-          </div>
-        </div>
+        <Glyph onClick={onHome} />
+        <Switcher analyst={analyst} onSwitch={onSwitch} />
         <button type="button" className="btn btn-quiet" aria-expanded={showPrompt}
           onClick={() => setShowPrompt(!showPrompt)}>
           Instructions{promptEdited ? " (edited)" : ""}
+        </button>
+        <button type="button" className="icon-btn" aria-label="Settings" onClick={onOpenSettings}>
+          <GearIcon />
         </button>
       </header>
 
@@ -163,7 +205,7 @@ export default function Chat({
           <div className="instr-inner">
             <label htmlFor="sp">System prompt</label>
             <p>
-              The analyst’s instructions, sent with each message. Edit them to change how it
+              The {analyst.name} analyst’s instructions, sent with each message. Edit them to change how it
               responds.{messages.length > 0 && " Changes apply to your next message in this session."}
             </p>
             <textarea id="sp" data-testid="system-prompt-input" value={systemPrompt}
@@ -180,10 +222,10 @@ export default function Chat({
         <div className="thread">
           {messages.length === 0 && !loading && !loadingHistory && (
             <div className="empty-state">
-              <h2>Paste a conversation to begin.</h2>
-              <p>{analyst.description} Anonymise names first if you can.</p>
-              {analyst.starters.map((s) => (
-                <button key={s} type="button" className="starter" onClick={() => setText(s + "\n\n")}>{s}</button>
+              <h2>{analyst.heading}</h2>
+              <p>{analyst.description} Paste a conversation to begin, and anonymise names first if you can.</p>
+              {analyst.starters.map((st) => (
+                <button key={st} type="button" className="starter" onClick={() => onDraft(st + "\n\n")}>{st}</button>
               ))}
             </div>
           )}
@@ -223,9 +265,9 @@ export default function Chat({
       <div className="composer">
         <div className="composer-box">
           <label className="sr" htmlFor="msg">Message</label>
-          <textarea id="msg" ref={inputRef} data-testid="chat-input" rows={1} value={text}
+          <textarea id="msg" ref={inputRef} data-testid="chat-input" rows={1} value={draft}
             placeholder="Paste a conversation, or ask a question…" disabled={loading || loadingHistory}
-            onChange={(e) => setText(e.target.value)} onKeyDown={onKey} />
+            onChange={(e) => onDraft(e.target.value)} onKeyDown={onKey} />
           <button type="button" className="btn btn-primary send" data-testid="send-button"
             onClick={submit} disabled={!canSend} aria-label={loading ? "Sending" : "Send message"}>
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
