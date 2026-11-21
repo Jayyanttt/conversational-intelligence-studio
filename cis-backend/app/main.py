@@ -13,9 +13,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import Settings, load_settings
 from .db import Database
-from .llm import AllProvidersUnavailable, LLMClient, UnconfiguredClient
+from .llm import AllProvidersUnavailable, LiteLLMClient, LLMClient
 from .prompts import resolve_system_prompt
 from .schemas import ChatRequest, ChatResponse, HistoryResponse
+from .simulation import InvalidSimulationHeader, parse_simulate_header
 
 log = logging.getLogger("cis")
 
@@ -23,7 +24,7 @@ log = logging.getLogger("cis")
 def create_app(settings: Optional[Settings] = None, llm_client: Optional[LLMClient] = None) -> FastAPI:
     settings = settings or load_settings()
     db = Database(settings.database_path)
-    client: LLMClient = llm_client or UnconfiguredClient()
+    client: LLMClient = llm_client or LiteLLMClient(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -86,7 +87,19 @@ def create_app(settings: Optional[Settings] = None, llm_client: Optional[LLMClie
     ):
         session = db.get_session(body.session_id)
         stored_prompt = session["system_prompt"] if session else None
-        effective_prompt = resolve_system_prompt(body.system_prompt, body.analyst_type, stored_prompt)
+        stored_analyst = session["analyst_type"] if session else None
+        if stored_analyst and body.analyst_type and body.analyst_type != stored_analyst:
+            # A session keeps its analyst; nothing is persisted for a rejected request.
+            return JSONResponse(
+                {
+                    "detail": (
+                        f"session '{body.session_id}' belongs to analyst_type '{stored_analyst}'; "
+                        f"cannot switch to '{body.analyst_type}'. Start a new session instead."
+                    )
+                },
+                status_code=422,
+            )
+        effective_prompt = resolve_system_prompt(body.system_prompt, stored_prompt, body.analyst_type)
 
         history = [{"role": m["role"], "content": m["content"]} for m in db.get_history(body.session_id)]
         messages = (
@@ -95,7 +108,12 @@ def create_app(settings: Optional[Settings] = None, llm_client: Optional[LLMClie
             + [{"role": "user", "content": body.message}]
         )
 
-        simulate = x_simulate_failure if settings.enable_failure_simulation else None
+        simulate = None
+        if settings.enable_failure_simulation:  # header is ignored entirely when disabled
+            try:
+                simulate = parse_simulate_header(x_simulate_failure)
+            except InvalidSimulationHeader as exc:
+                return JSONResponse({"detail": str(exc)}, status_code=422)
         try:
             result = client.complete(messages, simulate_failure=simulate)
         except AllProvidersUnavailable:

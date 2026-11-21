@@ -44,17 +44,20 @@ PRESETS: dict[str, str] = {
 
 def resolve_system_prompt(
     request_prompt: str | None,
-    analyst_type: str | None,
     stored_prompt: str | None,
+    analyst_type: str | None,
 ) -> str:
-    """Precedence: request prompt > analyst preset > session's latest prompt > default.
+    """Effective system prompt, in order of precedence:
 
-    The stored prompt keeps applying to later turns until a new one is supplied.
+    1. a newly supplied system_prompt (request)
+    2. the session's previously stored prompt
+    3. the analyst preset (only reached for a new session, or one with no stored prompt)
+    4. the default prompt
     """
     if request_prompt:
         return request_prompt
-    if analyst_type and analyst_type in PRESETS:
-        return PRESETS[analyst_type]
     if stored_prompt:
         return stored_prompt
+    if analyst_type and analyst_type in PRESETS:
+        return PRESETS[analyst_type]
     return DEFAULT_PROMPT

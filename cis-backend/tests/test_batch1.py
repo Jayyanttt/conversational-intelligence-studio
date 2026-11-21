@@ -114,8 +114,9 @@ def test_failed_request_not_persisted_and_returns_503(client, fake_llm):
     assert len(client.get("/sessions/f/messages").json()["messages"]) == 2
 
 
-def test_default_unconfigured_client_gives_503_not_fake_answer(settings):
-    with TestClient(create_app(settings)) as c:
+def test_default_client_with_no_keys_gives_503_not_fake_answer(settings):
+    from dataclasses import replace
+    with TestClient(create_app(replace(settings, api_keys=()))) as c:
         r = chat(c)
         assert r.status_code == 503 and r.json()["detail"] == "all providers unavailable"
 
@@ -133,7 +134,7 @@ def test_simulate_header_only_forwarded_when_enabled(settings, fake_llm):
     from dataclasses import replace
     with TestClient(create_app(settings, fake_llm)) as c:
         c.post("/chat", json={"session_id": "s", "message": "m"}, headers={"X-Simulate-Failure": "key_1=429"})
-    assert fake_llm.calls[-1]["simulate_failure"] == "key_1=429"
+    assert fake_llm.calls[-1]["simulate_failure"] == {"key_1": 429}
     with TestClient(create_app(replace(settings, enable_failure_simulation=False), fake_llm)) as c:
         c.post("/chat", json={"session_id": "s2", "message": "m"}, headers={"X-Simulate-Failure": "key_1=429"})
     assert fake_llm.calls[-1]["simulate_failure"] is None
@@ -142,9 +143,9 @@ def test_simulate_header_only_forwarded_when_enabled(settings, fake_llm):
 def test_prompt_precedence_and_persistence_across_turns(client, fake_llm):
     chat(client, "x", "q1", analyst_type="workplace")
     assert "Workplace Intelligence Analyst" in fake_llm.calls[-1]["messages"][0]["content"]
-    chat(client, "x", "q2")  # no prompt supplied -> latest prompt continues
+    chat(client, "x", "q2")  # no prompt supplied -> stored prompt continues
     assert "Workplace Intelligence Analyst" in fake_llm.calls[-1]["messages"][0]["content"]
-    chat(client, "x", "q3", system_prompt="CUSTOM", analyst_type="customer")  # custom wins
+    chat(client, "x", "q3", system_prompt="CUSTOM", analyst_type="workplace")  # new prompt wins
     assert fake_llm.calls[-1]["messages"][0]["content"] == "CUSTOM"
     chat(client, "x", "q4")
     assert fake_llm.calls[-1]["messages"][0]["content"] == "CUSTOM"
