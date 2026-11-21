@@ -2,39 +2,44 @@
 
 **Understand the conversations behind your business.**
 
-Conversational Intelligence Studio (CIS) is a multi-analyst conversational intelligence application designed to help users extract meaningful insights from customer and workplace conversations.
+Conversational Intelligence Studio (CIS) is a multi-analyst conversational intelligence application that helps users extract useful insights from customer and workplace conversations. It turns conversation transcripts into structured findings about intent, recurring concerns, unresolved follow-ups, operational blockers and communication dynamics.
 
-The platform provides specialised analysis modes for examining conversational intent, recurring concerns, unresolved follow-ups, communication patterns and potential operational blockers.
+## Live Application
 
-## Overview
+- **Frontend:** [https://conversational-intelligence-studio.vercel.app](https://conversational-intelligence-studio.vercel.app)
+- **Backend API:** [https://conversational-intelligence-studio.onrender.com](https://conversational-intelligence-studio.onrender.com)
+- **Health check:** [https://conversational-intelligence-studio.onrender.com/health](https://conversational-intelligence-studio.onrender.com/health)
 
-CIS brings three specialised analytical perspectives into a unified workspace:
+The frontend is deployed on Vercel and the FastAPI backend is deployed on Render. The backend health endpoint reports service status, configured key count and cache status.
+
+## Analyst Workspaces
+
+CIS provides three specialised analytical perspectives in one application:
 
 ### Customer Intelligence
-
-Analyse customer-facing conversations to identify intent, recurring complaints, service friction, unresolved queries and follow-up opportunities.
+Analyses customer-facing conversations to identify customer intent, recurring complaints, service friction, unresolved queries and follow-up opportunities.
 
 ### Workplace Intelligence
-
-Examine internal team conversations to surface blockers, unanswered questions, recurring issues and topics that may require human attention.
+Examines internal team conversations to surface blockers, unanswered questions, recurring issues and topics that may need human attention.
 
 ### Communication Patterns
+Explores group communication dynamics, including who raises topics, who responds, how information is handed off and where conversations tend to stall.
 
-Explore group communication dynamics, including who raises topics, who responds, how information is handed off and where conversations tend to stall.
-
-Each analyst operates through a dedicated workspace with its own conversation history and analysis context. The analyst modes use distinct instructions while sharing the same backend and model integration.
+Each workspace uses its own analyst instructions and conversation context while sharing the same backend and configured inference model. These are distinct analytical modes, not separately trained models.
 
 ## Key Features
 
-- **Specialised analyst workspaces:** Three dedicated modes for customer, workplace and communication analysis.
-- **Conversational interface:** Submit conversation text and ask contextual follow-up questions.
-- **Session management:** Create, revisit and manage separate conversations.
-- **Evidence-oriented analysis:** Encourage findings grounded in supplied conversational evidence and direct quotations.
-- **Response metadata:** Surface technical information associated with generated responses, including model, latency, token usage and key failover details.
-- **Personalisation and accessibility:** Light, dark and system themes, text scaling, contrast and motion preferences.
-- **Persistent preferences:** Retain interface and analysis preferences across sessions.
-- **Provider failover:** Retry requests with another configured API key when a provider request fails.
-- **Controlled failure simulation:** Exercise failover behaviour during testing without depending on an actual provider outage.
+- **Three analyst workspaces:** Customer Intelligence, Workplace Intelligence and Communication Patterns.
+- **Conversational analysis:** Submit a transcript and ask contextual questions or follow-ups.
+- **Session management:** Create and revisit separate conversations.
+- **Persistent conversation history:** Store and retrieve session messages using SQLite.
+- **Structured analysis:** Generate findings grounded in the supplied conversation.
+- **Response metadata:** Inspect inference source, model, latency, token usage, key identifier and fallback attempts.
+- **Response caching:** Cache eligible responses to reduce repeated inference calls.
+- **Provider integration through LiteLLM:** Use a unified interface to the configured inference provider.
+- **API-key retry/failover logic:** The backend supports an ordered key pool and fallback attempts. The current hosted deployment is configured with one NVIDIA API key, so multi-key failover is not demonstrated by the live deployment.
+- **Controlled failure simulation:** Exercise failure and retry behaviour during testing.
+- **Interface preferences and accessibility:** Includes theme and presentation preferences.
 
 ## Technology Stack
 
@@ -44,64 +49,61 @@ Each analyst operates through a dedicated workspace with its own conversation hi
 | Build tooling | Vite |
 | Backend | Python, FastAPI, Pydantic |
 | LLM integration | LiteLLM |
-| Model provider | Google Gemini API |
+| Hosted inference | NVIDIA NIM — `nvidia/nemotron-3.5-bolt-e4b` |
 | Database | SQLite |
+| Response cache | LiteLLM cache |
 | Testing | pytest |
-| Containerisation | Docker, Docker Compose (implementation in progress) |
+| Containerisation | Docker, Docker Compose |
+| Frontend hosting | Vercel |
+| Backend hosting | Render |
 
 ## Architecture
 
-CIS uses a frontend-backend architecture. The frontend manages the analyst workspaces and user interaction, while the backend resolves prompts, manages conversation sessions, communicates with the configured language model and persists conversation data.
+The React frontend provides the analyst workspaces and conversation interface. It sends requests to the FastAPI backend, which resolves the analyst instructions, manages session history, invokes the configured model through LiteLLM, and stores messages and response metadata in SQLite.
 
 ```mermaid
 flowchart TB
     USER[User] --> UI[React + Vite frontend]
-
     subgraph FRONTEND[Frontend]
-        UI --> WORKSPACES[Customer Intelligence<br/>Workplace Intelligence<br/>Communication Patterns]
-        WORKSPACES --> CLIENT[Frontend API service]
-        WORKSPACES --> PREFS[Interface preferences]
-        WORKSPACES --> SESSION_INDEX[Recent-session index]
+        UI --> WS[Customer Intelligence<br/>Workplace Intelligence<br/>Communication Patterns]
+        WS --> CLIENT[Frontend API service]
     end
 
     CLIENT -->|HTTP / JSON| API[FastAPI backend]
 
     subgraph BACKEND[Backend]
         API --> ROUTES[Chat and session endpoints]
-        ROUTES --> PROMPTS[Prompt and session resolver]
-        PROMPTS --> LITELLM[LiteLLM client]
-        LITELLM --> KEYPOOL[Ordered API-key pool]
-        API <--> SQLITE[(SQLite conversation store)]
+        ROUTES --> PROMPTS[Analyst prompt and session resolver]
+        PROMPTS --> LLM[LiteLLM]
+        LLM --> CACHE[(Response cache)]
+        API <--> DB[(SQLite conversation store)]
         API --> HEALTH[Health endpoint]
     end
 
-    KEYPOOL --> GEMINI[Google Gemini API]
-    SIM[X-Simulate-Failure] -.->|Controlled testing| LITELLM
-    LITELLM -.-> CACHE[(In-memory response cache<br/>pending final validation)]
+    LLM --> NIM[NVIDIA NIM<br/>Nemotron 3.5 Bolt E4B]
+    SIM[X-Simulate-Failure] -.->|Controlled testing| LLM
 ```
 
 ### Request Flow
 
-1. A user selects an analyst workspace and submits a message.
-2. The frontend sends the message, session identifier, analyst type and any applicable custom system prompt to the FastAPI backend.
-3. The backend resolves the effective system prompt and retrieves the existing conversation history.
-4. LiteLLM sends the request to the configured model using the ordered API-key pool. If a key fails, the backend can attempt the next configured key.
-5. The assistant response and its execution metadata are stored in SQLite.
-6. The frontend displays the response and available metadata. Earlier messages can be retrieved through the session history endpoint.
-
-The response cache is part of the current backend validation work. Its final behaviour and dependency requirements are being checked before it is treated as complete.
+1. The user selects an analyst workspace and submits a transcript or question.
+2. The frontend sends the message, session identifier and analyst type to the FastAPI backend.
+3. The backend resolves the applicable analyst instructions and retrieves prior messages for the session.
+4. LiteLLM checks the response cache where applicable and sends a cache miss to the configured NVIDIA NIM model.
+5. The backend stores the response and associated metadata in SQLite.
+6. The frontend displays the analysis and its technical metadata. Session history can be retrieved through the messages endpoint.
 
 ## API
 
-The backend exposes the following endpoints:
+The backend exposes these endpoints:
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/health` | Reports backend availability and configured service status |
+| `GET` | `/health` | Reports backend health and configured service status |
 | `POST` | `/chat` | Sends a message and receives an assistant response |
 | `GET` | `/sessions/{session_id}/messages` | Retrieves messages and response metadata for a session |
 
-Assistant responses include the following execution metadata:
+Assistant response metadata includes:
 
 - `resolution_source`
 - `model`
@@ -111,59 +113,46 @@ Assistant responses include the following execution metadata:
 - `key_id`
 - `fallback_attempts`
 
+The live health endpoint can be checked at [`/health`](https://conversational-intelligence-studio.onrender.com/health).
+
 ## Project Structure
 
 ```text
 CIS/
-│
 ├── cis-frontend/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── data/
 │   │   └── services/
-│   ├── package.json
-│   └── vite.config.js
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   └── package.json
 │
 ├── cis-backend/
 │   ├── app/
 │   ├── tests/
 │   ├── data/                 # Local runtime data; not committed
+│   ├── Dockerfile
 │   ├── requirements.txt
 │   └── requirements-dev.txt
 │
-├── docker-compose.yml        # To be added in the Docker implementation
-├── .env.example              # To be added with deployment configuration
+├── docker-compose.yml
+├── Makefile
+├── DOCKER_SETUP.txt
 ├── .gitignore
 └── README.md
 ```
 
-## Current Implementation Status
-
-- [x] React frontend with three analyst workspaces
-- [x] Analyst-specific prompt presets
-- [x] FastAPI application and required API endpoints
-- [x] SQLite conversation and session persistence
-- [x] Multi-turn conversation history
-- [x] Multiple API-key configuration
-- [x] Automatic key failover
-- [x] Controlled failure simulation for failover testing
-- [x] Response metadata persistence and retrieval
-- [ ] Final response-cache validation and acceptance
-- [ ] Backend Dockerfile and Docker Compose configuration
-- [ ] Public deployment and end-to-end verification
-
-This status reflects the current development checkpoint. Caching, containerisation, deployment and final end-to-end integration remain separate validation tasks.
-
-## Getting Started
+## Run Locally
 
 ### Prerequisites
 
 - Node.js and npm
-- Python
-- API credentials for a supported language model provider
-- Docker and Docker Compose (for the containerised setup, once available)
+- Python 3.11+
+- An NVIDIA NIM API key
+- Docker Desktop with Docker Compose (for containerised execution)
 
-### Frontend Setup
+### Frontend
 
 ```bash
 cd cis-frontend
@@ -171,60 +160,74 @@ npm install
 npm run dev
 ```
 
-### Backend Setup
+### Backend
 
 ```bash
 cd cis-backend
 python -m venv .venv
 ```
 
-Activate the virtual environment, then install the dependencies:
+Activate the virtual environment and install dependencies:
 
-```bash
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 ```
 
-Create a local `.env` file inside `cis-backend/` and provide the required environment variables and provider API keys. Keep this file local; do not commit it.
+Create `cis-backend/.env` with the provider key and the configuration expected by `app/config.py`. The hosted NVIDIA setup uses the following variable names and model identifier:
 
-Start the backend API:
+```env
+NVIDIA_NIM_API_KEY=your_nvidia_nim_api_key
+LLM_MODEL=nvidia_nim/nvidia/nemotron-3.5-bolt-e4b
+DATABASE_URL=sqlite:///./cis.db
+ENABLE_FAILURE_SIMULATION=true
+CACHE_ENABLED=true
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+Keep `.env` private and never commit API keys or other credentials.
+
+Start the backend:
 
 ```bash
 python -m uvicorn app.asgi:app --reload --port 8000
 ```
 
-Run the backend tests:
+Run backend tests:
 
 ```bash
 python -m pytest -v
 ```
 
-### Running with Docker
+### Docker Compose
 
-Docker and Docker Compose instructions will be added once the container configuration has been implemented and verified. The intended workflow is:
+From the repository root:
 
 ```bash
 docker compose up --build
 ```
 
-To stop the application:
+To stop the services:
 
 ```bash
 docker compose down
 ```
 
-## Configuration
+Refer to `DOCKER_SETUP.txt` for project-specific container setup notes. Supply required secrets through the local environment configuration; do not put API keys in the Dockerfile or commit them.
 
-Application credentials and environment-specific settings are supplied through environment variables.
+## Deployment Configuration
 
-Use `.env.example` as a reference when configuring a local environment once it is added. Never commit API keys, credentials or private environment files.
+- The Vercel frontend uses `VITE_API_BASE_URL` to point to the deployed backend API base URL.
+- The Render backend uses environment variables for the NVIDIA NIM key, model selection, allowed frontend origin, database and cache settings.
+- `ALLOWED_ORIGINS` on the backend must include `https://conversational-intelligence-studio.vercel.app`.
+- After changing deployment environment variables, redeploy the relevant service so the new configuration is applied.
 
-Local SQLite databases, virtual environments, caches and generated runtime data should remain outside source control.
+Do not expose provider keys through frontend variables. In particular, never prefix a secret API key with `VITE_`.
 
 ## Responsible Use
 
-CIS is intended to support human understanding of conversations, not replace human judgement.
-
-Its analytical outputs should be interpreted in context and verified against the underlying conversation. The platform should not be used to infer sensitive personal attributes, make unsupported claims about individuals, or automate employment, disciplinary or other consequential decisions.
+CIS is intended to support human understanding of conversations, not replace human judgement. Analytical outputs should be interpreted in context and checked against the source conversation. The application should not be used to infer sensitive personal attributes, make unsupported claims about individuals, or automate employment, disciplinary or other consequential decisions.
 
 Users should obtain appropriate permission and anonymise personal information before submitting conversation data.
 

@@ -1,0 +1,32 @@
+CIS Batch 4 Docker setup
+
+Extract this archive at the CIS repository root, not inside a nested Docker folder.
+The paths in this archive are relative to the repository root.
+
+Before building:
+1. Ensure cis-backend/.env exists and contains NVIDIA_NIM_API_KEY=<your new key>.
+2. Ensure cis-backend/requirements.txt includes all runtime dependencies, including
+   uvicorn, litellm, python-dotenv, orjson and soundfile.
+3. Ensure cis-frontend/package.json has a build script and the Vite app uses
+   VITE_API_BASE_URL for its API base URL.
+4. Confirm cis-backend/app/main.py exports the FastAPI instance as `app`.
+   This Dockerfile runs `uvicorn app.main:app`.
+
+Run from repository root:
+    docker compose up --build
+
+URLs:
+    Frontend: http://localhost:3000
+    Backend health: http://localhost:8000/health
+
+Stop without deleting chat history:
+    docker compose down
+
+Restart:
+    docker compose restart
+
+WARNING: `docker compose down -v` deletes the SQLite volume and all saved chat history.
+Do not run it unless you intend to erase that data.
+
+This Compose configuration is for local Docker testing. Public deployment requires
+setting the browser-facing VITE_API_BASE_URL and ALLOWED_ORIGINS to the deployed URLs.
