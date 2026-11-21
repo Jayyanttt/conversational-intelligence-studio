@@ -68,17 +68,18 @@ def create_app(settings: Optional[Settings] = None, llm_client: Optional[LLMClie
     def health():
         db_ok = db.ping()
         keys = len(settings.api_keys)
+        cache_on = bool(getattr(client, "cache_enabled", settings.cache_enabled))
         if not db_ok or keys < 1:
             return JSONResponse(
                 {
                     "status": "error",
                     "detail": "database unreachable" if not db_ok else "no api keys configured",
                     "keys_configured": keys,
-                    "cache_enabled": settings.cache_enabled,
+                    "cache_enabled": cache_on,
                 },
                 status_code=503,
             )
-        return {"status": "ok", "keys_configured": keys, "cache_enabled": settings.cache_enabled}
+        return {"status": "ok", "keys_configured": keys, "cache_enabled": cache_on}
 
     @app.post("/chat", response_model=ChatResponse)
     def chat(

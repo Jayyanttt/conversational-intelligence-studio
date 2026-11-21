@@ -50,3 +50,13 @@ def fake_llm():
 def client(settings, fake_llm):
     with TestClient(create_app(settings, fake_llm), raise_server_exceptions=False) as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _fresh_litellm_cache():
+    """LiteLLM's cache is process-global; every test starts and ends without one."""
+    from app.llm import reset_cache
+
+    reset_cache()
+    yield
+    reset_cache()

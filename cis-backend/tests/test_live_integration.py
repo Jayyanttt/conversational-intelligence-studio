@@ -19,10 +19,10 @@ pytestmark = [
 
 @pytest.fixture
 def live_client(tmp_path):
-    keys = parse_api_keys(os.getenv("LLM_API_KEYS"))
+    keys = parse_api_keys(os.getenv("NVIDIA_NIM_API_KEY"))
     assert len(keys) >= 2, "need at least two real keys"
     s = Settings(keys, str(tmp_path / "live.db"), ("http://localhost:3000",), True, True,
-                 os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash"))
+                 os.getenv("LLM_MODEL", "nvidia_nim/nvidia/nemotron-3.5-bolt-e4b"))
     with TestClient(create_app(s)) as c:
         yield c
 

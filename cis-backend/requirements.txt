@@ -2,3 +2,8 @@ fastapi>=0.110,<1.0
 uvicorn[standard]>=0.29,<1.0
 pydantic>=2.6,<3.0
 litellm==1.110.2
+# LiteLLM 1.110.2 imports these on every cache HIT (via litellm.proxy.* modules, verified in a
+# clean venv: a hit raises ModuleNotFoundError without them). soundfile also pulls numpy + cffi.
+orjson>=3.9,<4
+soundfile>=0.12,<1
+python-dotenv

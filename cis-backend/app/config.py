@@ -4,6 +4,10 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 @dataclass(frozen=True)
 class ApiKey:
@@ -50,11 +54,27 @@ def parse_origins(raw: str | None) -> tuple[str, ...]:
 
 
 def load_settings() -> Settings:
+    nvidia_key = os.getenv("NVIDIA_NIM_API_KEY", "").strip()
+
+    if nvidia_key:
+        api_keys = (ApiKey(key_id="nvidia_1", secret=nvidia_key),)
+    else:
+        api_keys = parse_api_keys(os.getenv("LLM_API_KEYS"))
+
     return Settings(
-        api_keys=parse_api_keys(os.getenv("LLM_API_KEYS")),
-        database_path=parse_database_path(os.getenv("DATABASE_URL", "sqlite:///./data/app.db")),
-        allowed_origins=parse_origins(os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")),
-        enable_failure_simulation=_truthy(os.getenv("ENABLE_FAILURE_SIMULATION"), False),
+        api_keys=api_keys,
+        database_path=parse_database_path(
+            os.getenv("DATABASE_URL", "sqlite:///./data/app.db")
+        ),
+        allowed_origins=parse_origins(
+            os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+        ),
+        enable_failure_simulation=_truthy(
+            os.getenv("ENABLE_FAILURE_SIMULATION"), False
+        ),
         cache_enabled=_truthy(os.getenv("CACHE_ENABLED"), True),
-        model=os.getenv("LLM_MODEL", "gemini/gemini-2.0-flash"),
+        model=os.getenv(
+            "LLM_MODEL",
+            "nvidia_nim/nvidia/nemotron-3.5-bolt-e4b"
+        ),
     )
